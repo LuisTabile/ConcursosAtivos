@@ -1,0 +1,20 @@
+# Web Scraping
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=5.1.0
+
+# PDF Processing
+pdfplumber>=0.10.0
+
+# Data Handling
+pandas>=2.2.0
+openpyxl>=3.1.0
+
+# Utilities
+loguru>=0.7.0
+tqdm>=4.66.0
+python-dotenv>=1.0.0
+
+# Optional: Uncomment if JavaScript rendering is needed
+# selenium>=4.16.0
+# webdriver-manager>=4.0.0
