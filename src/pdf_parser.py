@@ -151,13 +151,17 @@ class PDFParser:
             # Calcular score baseado em palavras-chave encontradas
             score = sum(1 for keyword in keywords if keyword in combined_text)
             
-            # Se tem pelo menos 2 palavras-chave ou tem a mesma estrutura
-            if score >= 2:
+            # Priorizar tabelas com muitas linhas (mais de 10) e pelo menos 1 palavra-chave
+            # ou pelo menos 2 palavras-chave
+            is_cargo_table = (score >= 2) or (score >= 1 and len(df) > 10)
+            
+            if is_cargo_table:
                 if reference_shape is None:
                     reference_shape = df.shape[1]  # Número de colunas
                 
-                # Se tem o mesmo número de colunas, é continuação da tabela
-                if df.shape[1] == reference_shape:
+                # Aceitar tabelas com número similar de colunas (tolerância ±2)
+                # Editais podem ter pequenas variações no número de colunas entre páginas
+                if abs(df.shape[1] - reference_shape) <= 2:
                     cargo_tables.append(df)
                     logger.debug(f"Tabela de cargos encontrada (página {df['_pagina'].iloc[0] if '_pagina' in df.columns else '?'}): {df.shape}")
         
@@ -169,9 +173,26 @@ class PDFParser:
         if len(cargo_tables) == 1:
             consolidated = cargo_tables[0]
         else:
-            # Concatenar mantendo as mesmas colunas
+            # Concatenar tabelas com diferentes números de colunas
             logger.info(f"Consolidando {len(cargo_tables)} tabelas de cargos")
-            consolidated = pd.concat(cargo_tables, ignore_index=True)
+            
+            # Encontrar o máximo de colunas
+            max_cols = max(df.shape[1] for df in cargo_tables)
+            
+            # Padronizar todas as tabelas com colunas numeradas
+            standardized_tables = []
+            for idx, df in enumerate(cargo_tables):
+                # Renomear colunas para índices numéricos
+                df_copy = df.copy()
+                df_copy.columns = list(range(df_copy.shape[1]))
+                
+                # Adicionar colunas faltantes se necessário
+                for i in range(df_copy.shape[1], max_cols):
+                    df_copy[i] = None
+                
+                standardized_tables.append(df_copy)
+            
+            consolidated = pd.concat(standardized_tables, ignore_index=True)
         
         logger.success(f"Tabela de cargos consolidada: {consolidated.shape}")
         return consolidated
@@ -285,11 +306,16 @@ class PDFParser:
                 if cargo_info[key] in ['nan', 'None', 'null']:
                     cargo_info[key] = ''
             
+            # Filtrar linhas de cabeçalho que aparecem como dados
+            cargo_lower = cargo_info['cargo'].lower()
+            if any(header in cargo_lower for header in ['cargo público', 'cargo\npúblico', 'função', 'escolaridade']):
+                continue
+            
             # Adicionar apenas se tiver cargo e salário preenchidos
             if (cargo_info['cargo'] and 
                 len(cargo_info['cargo']) > 3 and
                 cargo_info['salario'] and
-                cargo_info['salario'] not in ['nan', 'None', '-']):
+                cargo_info['salario'] not in ['nan', 'None', '-', 'inicial', 'R$']):
                 cargos.append(cargo_info)
                 logger.debug(f"Cargo adicionado: {cargo_info['cargo'][:50]}...")
         
